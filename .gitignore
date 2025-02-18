@@ -1,0 +1,54 @@
+# Ignore Go binary files
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Ignore Go workspace files
+*.swp
+*.swo
+*~
+
+# Ignore vendor folder (if using Go modules, but if you're vendoring manually, keep it)
+/vendor/
+
+# Ignore build artifacts
+/build/
+/bin/
+/obj/
+
+# Ignore Beego specific directories and files
+/ide/
+*.log
+
+# Ignore configuration files
+*.conf
+*.json
+
+# Ignore Elasticsearch related files
+*.es
+*.index
+
+# Ignore the Go module cache
+/go/pkg/
+
+# Ignore Go dependency file
+/go.mod
+/go.sum
+
+# Ignore the `main` log files
+*.log
+
+# Ignore IDE/Editor-specific files
+.idea/
+.vscode/
+*.iml
+*.sublime-workspace
+*.sublime-project
+
+# Ignore OS specific files
+.DS_Store
+Thumbs.db
