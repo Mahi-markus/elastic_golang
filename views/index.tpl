@@ -13,24 +13,26 @@
         <form id="search-form" action="/search" method="get" class="mb-4">
             <div class="relative">
                 <input type="text" name="query" id="search-input" placeholder="Search for a product..." class="p-2 w-full border rounded-md" required>
-                <!-- Autocomplete suggestions box -->
                 <div id="autocomplete-suggestions" class="absolute w-full bg-white border rounded-md mt-1 hidden z-10"></div>
             </div>
         </form>
 
-        <!-- Display search results -->
-        <div id="results" class="mt-4">
-            <!-- Results will appear here -->
+        <div id="results" class="mt-4"></div>
+
+        <div id="product-details" class="mt-6 p-4 border bg-white rounded-md hidden">
+            <h2 class="text-xl font-semibold">Product Details</h2>
+            <div id="product-name" class="mt-2 text-lg font-bold"></div>
+            <div id="product-description" class="mt-2"></div>
+            <div id="product-price" class="mt-2 font-bold"></div>
+            <div id="product-manufacturer" class="mt-2"></div>
         </div>
     </div>
 
     <script>
-        // Handle form submission using AJAX to get search results without reloading the page
         document.getElementById('search-form').addEventListener('submit', function(e) {
             e.preventDefault();
             let query = document.getElementById('search-input').value;
-            
-            // Make AJAX request for the selected query to fetch detailed information
+
             fetch(`/search?query=${query}`, {
                 method: 'GET',
                 headers: {
@@ -39,28 +41,23 @@
             })
             .then(response => response.json())
             .then(data => {
-                // Clear previous results
-                let resultsDiv = document.getElementById('results');
-                resultsDiv.innerHTML = '';
-
-                // Display results
-                if (data.length > 0) {
-                    let list = '<ul>';
-                    data.forEach(product => {
-                        list += `<li class="p-2 border-b">${product}</li>`;
-                    });
-                    list += '</ul>';
-                    resultsDiv.innerHTML = list;
-                } else {
-                    resultsDiv.innerHTML = '<p>No results found.</p>';
+                if (data.error) {
+                    document.getElementById('results').innerHTML = `<p>${data.error}</p>`;
+                    document.getElementById('product-details').classList.add('hidden');
+                    return;
                 }
+
+                document.getElementById('product-name').textContent = `Name: ${data.name}`;
+                document.getElementById('product-description').textContent = `Description: ${data.description}`;
+                document.getElementById('product-price').textContent = `Price: ${data.base_price}`;
+                document.getElementById('product-manufacturer').textContent = `Manufacturer: ${data.manufacturer}`;
+                document.getElementById('product-details').classList.remove('hidden');
             })
             .catch(error => {
                 console.error('Error:', error);
             });
         });
 
-        // Handle autocomplete suggestions as the user types
         document.getElementById('search-input').addEventListener('input', function() {
             let query = this.value;
             let suggestionBox = document.getElementById('autocomplete-suggestions');
@@ -71,7 +68,6 @@
                 return;
             }
 
-            // Fetch autocomplete suggestions from the backend (you should implement this API on the backend)
             fetch(`/autocomplete?query=${query}`, {
                 method: 'GET',
                 headers: {
@@ -80,30 +76,50 @@
             })
             .then(response => response.json())
             .then(data => {
-                suggestionBox.innerHTML = ''; // Clear the suggestion box
+                suggestionBox.innerHTML = '';
                 if (data.length > 0) {
                     data.forEach(product => {
                         let suggestionItem = document.createElement('div');
                         suggestionItem.textContent = product;
-                        suggestionItem.classList.add('p-2', 'cursor-pointer');
+                        suggestionItem.classList.add('p-2', 'cursor-pointer', 'hover:bg-gray-200');
                         suggestionItem.addEventListener('click', function() {
                             document.getElementById('search-input').value = product;
                             suggestionBox.classList.add('hidden');
-                            // Trigger search
-                            document.getElementById('search-form').submit();
+                            showProductDetails(product);
                         });
                         suggestionBox.appendChild(suggestionItem);
                     });
-                    suggestionBox.classList.remove('hidden'); // Show suggestion box
+                    suggestionBox.classList.remove('hidden');
                 } else {
-                    suggestionBox.classList.add('hidden'); // Hide if no suggestions
+                    suggestionBox.classList.add('hidden');
                 }
             })
             .catch(error => {
                 console.error('Error fetching autocomplete suggestions:', error);
-                suggestionBox.classList.add('hidden'); // Hide suggestion box on error
+                suggestionBox.classList.add('hidden');
             });
         });
+
+        function showProductDetails(productName) {
+            fetch(`/search?query=${encodeURIComponent(productName)}`)
+                .then(response => response.json())
+                .then(productDetails => {
+                    if (productDetails.error) {
+                        document.getElementById('results').innerHTML = `<p>${productDetails.error}</p>`;
+                        document.getElementById('product-details').classList.add('hidden');
+                        return;
+                    }
+
+                    document.getElementById('product-name').textContent = `Name: ${productDetails.name}`;
+                    document.getElementById('product-description').textContent = `Description: ${productDetails.description}`;
+                    document.getElementById('product-price').textContent = `Price: ${productDetails.base_price}`;
+                    document.getElementById('product-manufacturer').textContent = `Manufacturer: ${productDetails.manufacturer}`;
+                    document.getElementById('product-details').classList.remove('hidden');
+                })
+                .catch(error => {
+                    console.error('Error fetching product details:', error);
+                });
+        }
     </script>
 </body>
 </html>
