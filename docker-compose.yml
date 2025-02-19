@@ -1,0 +1,30 @@
+version: '3'
+
+services:
+  # Elasticsearch service
+  # elasticsearch:
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:7.10.2
+  #   environment:
+  #     - discovery.type=single-node
+  #   ports:
+  #     - "9200:9200"
+  #   volumes:
+  #     - esdata:/usr/share/elasticsearch/data
+
+  # Go (Beego) API service
+  go-api:
+    build:
+      context: .
+    ports:
+      - "8080:8080"
+    # depends_on:
+    #   - elasticsearch
+    # environment:
+    #   - ELASTICSEARCH_URL=http://elasticsearch:9200
+    volumes:
+      - .:/app
+    command: ["/app/app"]  # Make sure the command starts your Go app
+
+volumes:
+  esdata:
+    driver: local
