@@ -18,8 +18,8 @@ type SearchController struct {
 
 // AutocompleteHandler handles autocomplete suggestions
 func (c *SearchController) AutocompleteHandler() {
-	query := c.GetString("query")
-	log.Println("Received autocomplete query:", query)
+	queryParams := c.GetString("query")
+	log.Println("Received autocomplete query:", queryParams)
 
 	// Initialize Elasticsearch client
 	esClient, err := elastic.NewClient(elastic.SetURL("http://localhost:9200"))
@@ -30,106 +30,103 @@ func (c *SearchController) AutocompleteHandler() {
 		return
 	}
 
-	// Construct the search query for autocomplete
-	searchQuery := fmt.Sprintf(`{
-		"size": 10,
-		"query": {
-			"match_phrase_prefix": {
-				"products.product_name": "%s"
-			}
-		}
-	}`, query)
-	
+	// Your existing query
+	query := map[string]interface{}{
+		"size": 20, // Number of results to return
+		"query": map[string]interface{}{
+			"bool": map[string]interface{}{
+				"should": []map[string]interface{}{
+					{
+						"match_phrase_prefix": map[string]interface{}{
+							"products.product_name": map[string]interface{}{
+								"query": queryParams,
+								"max_expansions": 50,
+								"boost": 4,
+							},
+						},
+					},
+					{
+						"match": map[string]interface{}{
+							"products.product_name": map[string]interface{}{
+								"query": queryParams,
+								"operator": "or",
+								"fuzziness": "AUTO",
+								"prefix_length": 1,
+								"boost": 2,
+							},
+						},
+					},
+					{
+						"wildcard": map[string]interface{}{
+							"products.product_name": map[string]interface{}{
+								"value": fmt.Sprintf("*%s*", strings.ToLower(queryParams)),
+								"boost": 1,
+							},
+						},
+					},
+				},
+				"minimum_should_match": 1,
+			},
+		},
+		"highlight": map[string]interface{}{
+			"fields": map[string]interface{}{
+				"products.product_name": map[string]interface{}{},
+			},
+		},
+	}
 
-	// Use Source() to pass the query instead of BodyString()
+	// Convert query to JSON
+	queryJSON, err := json.Marshal(query)
+	if err != nil {
+		log.Println("Error marshaling query JSON:", err)
+		c.Data["json"] = map[string]string{"error": "Failed to build query"}
+		c.ServeJSON()
+		return
+	}
+
+	log.Println("Constructed Elasticsearch Query:", string(queryJSON))
+
+	// Execute search request
 	searchResult, err := esClient.Search().
-		Index("kibana_sample_data_ecommerce").
-		Source(strings.NewReader(searchQuery)).
-		Pretty(true).
-		Do(context.Background()) // Use context.Background() instead of c.Ctx
+	Index("kibana_sample_data_ecommerce").
+	Source(string(queryJSON)). // ✅ Use Source() with marshaled JSON
+	Do(context.Background())
+
 
 	if err != nil {
-		log.Println("Error executing autocomplete query:", err)
+		log.Println("Error executing search query:", err)
 		c.Data["json"] = map[string]string{"error": "Autocomplete request failed"}
 		c.ServeJSON()
 		return
 	}
 
-	// Log the raw response for debugging
-	rawBody, err := json.Marshal(searchResult)
-	if err != nil {
-		log.Println("Error marshalling response body:", err)
-		c.Data["json"] = map[string]string{"error": "Failed to process response"}
-		c.ServeJSON()
-		return
-	}
-	log.Println("Raw Elasticsearch response:", string(rawBody))
-
-	// Parse the JSON response
-	var response map[string]interface{}
-	if err := json.Unmarshal(rawBody, &response); err != nil {
-		log.Println("Error parsing response body:", err)
-		c.Data["json"] = map[string]string{"error": "Invalid response format"}
-		c.ServeJSON()
-		return
-	}
-
-	// Extract hits safely
-	hitsData, ok := response["hits"].(map[string]interface{})
-	if !ok {
-		log.Println("Error: 'hits' field missing or invalid")
-		c.Data["json"] = []string{}
-		c.ServeJSON()
-		return
-	}
-
-	hits, ok := hitsData["hits"].([]interface{})
-	if !ok {
-		log.Println("Error: 'hits.hits' field missing or invalid")
-		c.Data["json"] = []string{}
-		c.ServeJSON()
-		return
-	}
-
-	// Log the number of hits to verify we're getting results
-	log.Printf("Found %d hits\n", len(hits))
-
-	// Parse product names from the hits
+	// Process the search results
 	var suggestions []string
-	for _, hit := range hits {
-		hitMap, ok := hit.(map[string]interface{})
-		if !ok {
+	for _, hit := range searchResult.Hits.Hits {
+		var hitSource map[string]interface{}
+		if err := json.Unmarshal(hit.Source, &hitSource); err != nil {
+			log.Println("Error unmarshaling hit source:", err)
 			continue
 		}
 
-		source, ok := hitMap["_source"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Log the full source to verify the structure
-		log.Println("Source:", source)
-
-		// Check if products is an array and extract product_name
-		products, ok := source["products"].([]interface{})
-		if !ok {
-			continue
-		}
-
-		for _, product := range products {
-			if productMap, ok := product.(map[string]interface{}); ok {
-				if name, ok := productMap["product_name"].(string); ok {
-					suggestions = append(suggestions, name)
+		// Extract product names from the products array
+		if products, exists := hitSource["products"].([]interface{}); exists {
+			for _, productItem := range products {
+				if productInfo, ok := productItem.(map[string]interface{}); ok {
+					if name, found := productInfo["product_name"].(string); found {
+						suggestions = append(suggestions, name)
+					}
 				}
 			}
 		}
 	}
 
-	// Log suggestions for debugging
+	// Log and return the autocomplete suggestions
 	log.Println("Returning autocomplete suggestions:", suggestions)
 	c.Data["json"] = suggestions
 	c.ServeJSON()
 }
+
 
 
 
@@ -165,7 +162,7 @@ func (c *SearchController) SearchHandler() {
 	// Execute search request
 	searchResult, err := esClient.Search().
 		Index("kibana_sample_data_ecommerce").
-		Source(strings.NewReader(searchQuery)).
+		Source(searchQuery). // ✅ Use Source() directly
 		Pretty(true).
 		Do(context.Background())
 
